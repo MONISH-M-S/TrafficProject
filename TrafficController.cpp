@@ -1,106 +1,132 @@
+// ============================================================
+// MODULE 5 — TRAFFIC CONTROLLER
+// traffic_controller.h
+// ============================================================
+#pragma once
 #include <iostream>
-#include "TrafficController.h"
-#include "FairnessManager.h"
-#include "TimerManager.h"
-#include "SignalTransition.h"
+#include <iomanip>
+#include <string>
+#include <memory>
+#include "road.h"
+#include "traffic_signal.h"
+#include "signal_transition.h"
+#include "vehicle.h"
 
-using namespace std;
+class TrafficController {
+    Road r1, r2;
+    TrafficSignal s1, s2;
+    int roundNumber = 0;
 
-void TrafficController::inputTraffic() {
-    int n, amb;
-
-    cout << "\n=========== INPUT TRAFFIC DATA ===========\n";
-
-    cout << "Vehicles on Road 1 (excluding ambulance): ";
-    cin >> n;
-    for (int i = 0; i < n; i++)
-        r1.addVehicle(new Car());
-
-    cout << "Ambulance count on Road 1: ";
-    cin >> amb;
-    for (int i = 0; i < amb; i++)
-        r1.addVehicle(new Ambulance());
-
-    cout << "Vehicles on Road 2 (excluding ambulance): ";
-    cin >> n;
-    for (int i = 0; i < n; i++)
-        r2.addVehicle(new Bike());
-
-    cout << "Ambulance count on Road 2: ";
-    cin >> amb;
-    for (int i = 0; i < amb; i++)
-        r2.addVehicle(new Ambulance());
-}
-
-void TrafficController::controlTraffic() {
-
-    SignalTransition::showYellow();
-
-    if (r1.hasEmergency()) {
-        s1.setState("GREEN"); s2.setState("RED");
-
-        cout << "\n>>> PRIORITY: EMERGENCY DETECTED <<<\n";
-        cout << ">>> GREEN SIGNAL GIVEN TO ROAD 1 <<<\n";
-
-        r1.resetWait(); r2.incrementWait();
+    // ---- Print a separator line ----
+    void line(char c = '-', int w = 44) const {
+        std::cout << "  " << std::string(w, c) << "\n";
     }
-    else if (r2.hasEmergency()) {
-        s2.setState("GREEN"); s1.setState("RED");
 
-        cout << "\n>>> PRIORITY: EMERGENCY DETECTED <<<\n";
-        cout << ">>> GREEN SIGNAL GIVEN TO ROAD 2 <<<\n";
-
-        r2.resetWait(); r1.incrementWait();
+    // ---- Set one road GREEN, the other RED, print reason ----
+    void applyGreen(Road& /*green*/, Road& /*red*/,
+                    TrafficSignal& sg, TrafficSignal& sr,
+                    const std::string& reason) {
+        sg.setState(SignalState::GREEN);
+        sr.setState(SignalState::RED);
+        std::cout << "  DECISION : " << reason << "\n";
     }
-    else if (FairnessManager::checkFairness(r1)) {
-        s1.setState("GREEN"); s2.setState("RED");
 
-        cout << "\n>>> FAIRNESS RULE ACTIVATED <<<\n";
-        cout << ">>> GREEN SIGNAL GIVEN TO ROAD 1 <<<\n";
+public:
+    TrafficController() = default;
 
-        r1.resetWait(); r2.incrementWait();
+    // ---- Input: reset roads and fill with new vehicles ----
+    void inputTraffic() {
+        r1.clear();
+        r2.clear();
+        roundNumber++;
+
+        int n = 0, amb = 0;
+
+        line('=');
+        std::cout << "  INPUT TRAFFIC -- Round " << roundNumber << "\n";
+        line('=');
+
+        std::cout << "  Normal vehicles on Road 1 : "; std::cin >> n;
+        for (int i = 0; i < n; i++)
+            r1.addVehicle(std::make_unique<Car>());
+
+        std::cout << "  Ambulances    on Road 1   : "; std::cin >> amb;
+        for (int i = 0; i < amb; i++)
+            r1.addVehicle(std::make_unique<Ambulance>());
+
+        std::cout << "  Normal vehicles on Road 2 : "; std::cin >> n;
+        for (int i = 0; i < n; i++)
+            r2.addVehicle(std::make_unique<Bike>());
+
+        std::cout << "  Ambulances    on Road 2   : "; std::cin >> amb;
+        for (int i = 0; i < amb; i++)
+            r2.addVehicle(std::make_unique<Ambulance>());
     }
-    else if (FairnessManager::checkFairness(r2)) {
-        s2.setState("GREEN"); s1.setState("RED");
 
-        cout << "\n>>> FAIRNESS RULE ACTIVATED <<<\n";
-        cout << ">>> GREEN SIGNAL GIVEN TO ROAD 2 <<<\n";
+    // ---- Decision logic: Emergency > Volume ----
+    void controlTraffic() {
+        SignalTransition::showYellow();
 
-        r2.resetWait(); r1.incrementWait();
-    }
-    else {
-        if (r1.getVehicleCount() > r2.getVehicleCount()) {
-            s1.setState("GREEN"); s2.setState("RED");
+        bool e1 = r1.hasEmergency();
+        bool e2 = r2.hasEmergency();
 
-            cout << "\n>>> HIGH TRAFFIC DETECTED <<<\n";
-            cout << ">>> GREEN SIGNAL GIVEN TO ROAD 1 <<<\n";
+        // ---- Priority 1: Emergency ----------------------------------------
+        if (e1 && !e2) {
+            applyGreen(r1, r2, s1, s2, "EMERGENCY on Road 1");
 
-            r1.resetWait(); r2.incrementWait();
+        } else if (!e1 && e2) {
+            applyGreen(r2, r1, s2, s1, "EMERGENCY on Road 2");
+
+        } else if (e1 && e2) {
+            int a1 = r1.getAmbulanceCount();
+            int a2 = r2.getAmbulanceCount();
+
+            if (a1 > a2)
+                applyGreen(r1, r2, s1, s2,
+                    "BOTH EMERGENCY -- Road 1 has more ambulances ("
+                    + std::to_string(a1) + " vs " + std::to_string(a2) + ")");
+            else if (a2 > a1)
+                applyGreen(r2, r1, s2, s1,
+                    "BOTH EMERGENCY -- Road 2 has more ambulances ("
+                    + std::to_string(a2) + " vs " + std::to_string(a1) + ")");
+            else
+                (r1.getVehicleCount() >= r2.getVehicleCount())
+                    ? applyGreen(r1, r2, s1, s2,
+                        "BOTH EMERGENCY, equal ambulances -- Road 1 higher volume")
+                    : applyGreen(r2, r1, s2, s1,
+                        "BOTH EMERGENCY, equal ambulances -- Road 2 higher volume");
+
+        // ---- Priority 2: Normal traffic volume ----------------------------
         } else {
-            s2.setState("GREEN"); s1.setState("RED");
-
-            cout << "\n>>> HIGH TRAFFIC DETECTED <<<\n";
-            cout << ">>> GREEN SIGNAL GIVEN TO ROAD 2 <<<\n";
-
-            r2.resetWait(); r1.incrementWait();
+            if (r1.getVehicleCount() > r2.getVehicleCount())
+                applyGreen(r1, r2, s1, s2,
+                    "HIGH TRAFFIC -- Road 1 ("
+                    + std::to_string(r1.getVehicleCount()) + " vs "
+                    + std::to_string(r2.getVehicleCount()) + ")");
+            else
+                applyGreen(r2, r1, s2, s1,
+                    "HIGH TRAFFIC -- Road 2 ("
+                    + std::to_string(r2.getVehicleCount()) + " vs "
+                    + std::to_string(r1.getVehicleCount()) + ")");
         }
+
+        display();
     }
 
-    display();
-}
-
-void TrafficController::display() {
-    cout << "\n=====================================\n";
-    cout << "       TRAFFIC SYSTEM STATUS\n";
-    cout << "=====================================\n";
-
-    cout << "\n[ ROAD STATUS ]\n";
-    cout << "Road 1 Vehicles : " << r1.getVehicleCount() << endl;
-    cout << "Road 2 Vehicles : " << r2.getVehicleCount() << endl;
-
-    cout << "\n[ SIGNAL STATUS ]\n";
-    cout << "Signal 1 : " << s1.getState() << endl;
-    cout << "Signal 2 : " << s2.getState() << endl;
-
-    cout << "=====================================\n";
-}
+    // ---- Status display ----
+    void display() const {
+        std::cout << "\n";
+        line('=');
+        std::cout << "  TRAFFIC SYSTEM STATUS -- Round " << roundNumber << "\n";
+        line('=');
+        std::cout << "  Road 1  |  Signal: " << s1.getStateStr()
+                  << "  |  Total: " << std::setw(2) << r1.getVehicleCount()
+                  << "  (Amb: " << r1.getAmbulanceCount()
+                  << "  Normal: "  << r1.getNormalCount() << ")\n";
+        std::cout << "  Road 2  |  Signal: " << s2.getStateStr()
+                  << "  |  Total: " << std::setw(2) << r2.getVehicleCount()
+                  << "  (Amb: " << r2.getAmbulanceCount()
+                  << "  Normal: "  << r2.getNormalCount() << ")\n";
+        line('=');
+    }
+};
