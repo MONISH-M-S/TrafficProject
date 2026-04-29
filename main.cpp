@@ -1,28 +1,28 @@
+// ============================================================
+// MODULE 6 — MAIN
+// main.cpp
+// ============================================================
 #include <iostream>
-#include "TrafficController.h"
-
-using namespace std;
+#include "traffic_controller.h"
 
 int main() {
-    TrafficController t;
-    int choice;
+    TrafficController controller;
+    int choice = 0;
 
     do {
-        cout << "\n=====================================\n";
-        cout << "      SMART TRAFFIC SIMULATOR\n";
-        cout << "=====================================\n";
-        cout << "1. Start Simulation\n";
-        cout << "2. Exit\n";
-        cout << "Enter Choice: ";
-
-        cin >> choice;
+        std::cout << "\n  ====== SMART TRAFFIC SYSTEM ======\n";
+        std::cout << "  1. Run Simulation\n";
+        std::cout << "  2. Exit\n";
+        std::cout << "  Choice: ";
+        std::cin >> choice;
 
         if (choice == 1) {
-            t.inputTraffic();
-            t.controlTraffic();
+            controller.inputTraffic();
+            controller.controlTraffic();
         }
 
     } while (choice != 2);
 
+    std::cout << "\n  Goodbye!\n";
     return 0;
 }
